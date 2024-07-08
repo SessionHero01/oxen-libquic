@@ -45,6 +45,12 @@ namespace oxen::quic
         inbound_alpns = std::move(alpns.alpns);
     }
 
+    void Endpoint::handle_ep_opt(opt::alpns alpns)
+    {
+        inbound_alpns = std::move(alpns.inout_alpns);
+        outbound_alpns = inbound_alpns;
+    }
+
     void Endpoint::handle_ep_opt(opt::handshake_timeout timeout)
     {
         handshake_timeout = timeout.timeout;
@@ -154,8 +160,9 @@ namespace oxen::quic
         // We have to do this in two passes rather than just closing as we go because
         // `_close_connection` can remove from `conns`, invalidating our implicit iterator.
         std::vector<Connection*> close_me;
+
         for (const auto& c : conns)
-            if (!d || *d == c.second->direction())
+            if (c.second && (!d || *d == c.second->direction()))
                 close_me.push_back(c.second.get());
         for (auto* c : close_me)
             _close_connection(*c, io_error{0}, "NO_ERROR");
@@ -385,8 +392,18 @@ namespace oxen::quic
 
         conn.drop_streams();
 
-        conns.erase(rid);
-        log::debug(log_cat, "Deleted connection ({})", rid);
+        if (auto it = conns.find(rid); it != conns.end())
+        {
+            // Defer destruction until the next event loop tick because there are code paths that
+            // can land here from within an ongoing connection method and so it isn't safe to allow
+            // the Connection to get destroyed right now.
+            reset_soon(std::move(it->second));
+            // We do want to remove it from `conns`, though, because some scheduled callbacks check
+            // for `rid` being still in the endpoint and so, in that respect, we want the connection
+            // to be considered gone even if its destructor doesn't fire yet.
+            conns.erase(it);
+            log::debug(log_cat, "Deleted connection ({})", rid);
+        }
     }
 
     int Endpoint::validate_anti_replay(ustring key, ustring data, time_t /* exp */)
@@ -630,7 +647,8 @@ namespace oxen::quic
     std::optional<quic_cid> Endpoint::handle_packet_connid(const Packet& pkt)
     {
         ngtcp2_version_cid vid;
-        auto rv = ngtcp2_pkt_decode_version_cid(&vid, u8data(pkt.data), pkt.data.size(), NGTCP2_MAX_CIDLEN);
+        auto data = pkt.data<uint8_t>();
+        auto rv = ngtcp2_pkt_decode_version_cid(&vid, data.data(), data.size(), NGTCP2_MAX_CIDLEN);
 
         if (rv == NGTCP2_ERR_VERSION_NEGOTIATION)
         {  // version negotiation has not been sent yet, ignore packet
@@ -662,7 +680,8 @@ namespace oxen::quic
 
         ngtcp2_pkt_hd hdr;
 
-        auto rv = ngtcp2_accept(&hdr, u8data(pkt.data), pkt.data.size());
+        auto data = pkt.data<uint8_t>();
+        auto rv = ngtcp2_accept(&hdr, data.data(), data.size());
 
         if (rv < 0)  // catches all other possible ngtcp2 errors
         {
@@ -670,7 +689,7 @@ namespace oxen::quic
                     log_cat,
                     "Unknown packet received from {}, length={}, code={}; ignoring it.",
                     pkt.path.remote,
-                    pkt.data.size(),
+                    data.size(),
                     ngtcp2_strerror(rv));
             return nullptr;
         }
