@@ -21,6 +21,7 @@ extern "C"
 
 #include <algorithm>
 #include <cassert>
+#include <charconv>
 #include <chrono>
 #include <cstdint>
 #include <cstring>
@@ -56,11 +57,12 @@ namespace oxen::quic
     using ustring_view = std::basic_string_view<unsigned char>;
     using stream_buffer = std::deque<std::pair<bstring_view, std::shared_ptr<void>>>;
 
-    constexpr bool IN_HELL =
 #ifdef _WIN32
-            true;
+    inline constexpr bool IN_HELL = true;
+    extern const bool EMULATING_HELL;  // True if compiled for windows but running under WINE
 #else
-            false;
+    inline constexpr bool IN_HELL = false;
+    inline constexpr bool EMULATING_HELL = false;
 #endif
 
     struct ngtcp2_error_code_t final
@@ -139,46 +141,60 @@ namespace oxen::quic
     template <template <typename...> class Class, typename... Us>
     inline constexpr bool is_instantiation<Class, Class<Us...>> = true;
 
-    // Backport of c++20 std::remove_cvref_t
-    template <typename T>
-    using remove_cvref_t = std::remove_cv_t<std::remove_reference_t<T>>;
+    std::pair<std::string, uint16_t> parse_addr(std::string_view addr, std::optional<uint16_t> default_port = std::nullopt);
+
+    namespace detail
+    {
+        template <size_t N>
+        struct bsv_literal
+        {
+            consteval bsv_literal(const char (&s)[N])
+            {
+                for (size_t i = 0; i < N; i++)
+                    str[i] = static_cast<std::byte>(s[i]);
+            }
+            std::byte str[N];  // we keep the null on the end, in case you pass .data() to a C func
+            using size = std::integral_constant<size_t, N - 1>;
+        };
+        template <size_t N>
+        struct usv_literal
+        {
+            consteval usv_literal(const char (&s)[N])
+            {
+                for (size_t i = 0; i < N; i++)
+                    str[i] = static_cast<unsigned char>(s[i]);
+            }
+            unsigned char str[N];  // we keep the null on the end, in case you pass .data() to a C func
+            using size = std::integral_constant<size_t, N - 1>;
+        };
+    }  // namespace detail
 
     // strang literals
     inline ustring operator""_us(const char* str, size_t len) noexcept
     {
         return {reinterpret_cast<const unsigned char*>(str), len};
     }
-    inline ustring_view operator""_usv(const char* str, size_t len) noexcept
+    template <detail::usv_literal UStr>
+    constexpr ustring_view operator""_usv()
     {
-        return {reinterpret_cast<const unsigned char*>(str), len};
+        return {UStr.str, decltype(UStr)::size::value};
     }
 
-    inline bstring_view operator""_bsv(const char* str, size_t len) noexcept
+    template <detail::bsv_literal BStr>
+    constexpr bstring_view operator""_bsv()
     {
-        return {reinterpret_cast<const std::byte*>(str), len};
+        return {BStr.str, decltype(BStr)::size::value};
     }
-
     inline bstring operator""_bs(const char* str, size_t len) noexcept
     {
         return {reinterpret_cast<const std::byte*>(str), len};
     }
 
-    template <
-            typename sv_t,
-            std::enable_if_t<std::is_same_v<sv_t, ustring_view> || std::is_same_v<sv_t, bstring_view>, int> = 0>
-    inline std::string_view to_sv(sv_t x)
+    template <typename SV>
+        requires std::same_as<SV, ustring_view> || std::same_as<SV, bstring_view>
+    inline std::string_view to_sv(SV x)
     {
         return {reinterpret_cast<const char*>(x.data()), x.size()};
-    }
-
-    // Quasi-backport of C++20 str.starts_with/ends_with
-    inline constexpr bool starts_with(std::string_view str, std::string_view prefix)
-    {
-        return prefix.size() <= str.size() && str.substr(0, prefix.size()) == prefix;
-    }
-    inline constexpr bool ends_with(std::string_view str, std::string_view suffix)
-    {
-        return suffix.size() <= str.size() && str.substr(str.size() - suffix.size()) == suffix;
     }
 
     std::chrono::steady_clock::time_point get_time();
@@ -186,11 +202,25 @@ namespace oxen::quic
 
     std::string str_tolower(std::string s);
 
+    /// Parses an integer of some sort from a string, requiring that the entire string be consumed
+    /// during parsing.  Return false if parsing failed, sets `value` and returns true if the entire
+    /// string was consumed.
+    template <typename T>
+    bool parse_int(const std::string_view str, T& value, int base = 10)
+    {
+        T tmp;
+        auto* strend = str.data() + str.size();
+        auto [p, ec] = std::from_chars(str.data(), strend, tmp, base);
+        if (ec != std::errc() || p != strend)
+            return false;
+        value = tmp;
+        return true;
+    }
+
     // Shortcut for a const-preserving `reinterpret_cast`ing c.data() from a std::byte to a uint8_t
     // pointer, because we need it all over the place in the ngtcp2 API
-    template <
-            typename Container,
-            typename = std::enable_if_t<sizeof(typename std::remove_reference_t<Container>::value_type) == sizeof(uint8_t)>>
+    template <typename Container>
+        requires(sizeof(typename std::remove_reference_t<Container>::value_type) == sizeof(uint8_t))
     auto* u8data(Container&& c)
     {
         using u8_sameconst_t =
@@ -211,9 +241,10 @@ namespace oxen::quic
 
     // Stringview conversion function to interoperate between bstring_views and any other potential
     // user supplied type
-    template <typename CharOut, typename CharIn, typename = std::enable_if_t<sizeof(CharOut) == 1 && sizeof(CharIn) == 1>>
+    template <oxenc::basic_char CharOut, oxenc::basic_char CharIn>
     std::basic_string_view<CharOut> convert_sv(std::basic_string_view<CharIn> in)
     {
         return {reinterpret_cast<const CharOut*>(in.data()), in.size()};
     }
+
 }  // namespace oxen::quic

@@ -11,13 +11,15 @@
 
 namespace oxen::quic
 {
+    using namespace oxenc::literals;
+
     class Connection;
 
-    const std::string translate_key_format(gnutls_x509_crt_fmt_t crt);
+    std::string translate_key_format(gnutls_x509_crt_fmt_t crt);
 
-    const std::string translate_cert_type(gnutls_certificate_type_t type);
+    std::string translate_cert_type(gnutls_certificate_type_t type);
 
-    const std::string get_cert_type(gnutls_session_t session, gnutls_ctype_target_t type);
+    std::string get_cert_type(gnutls_session_t session, gnutls_ctype_target_t type);
 
     extern "C"
     {
@@ -49,9 +51,9 @@ namespace oxen::quic
     inline constexpr size_t GNUTLS_SECRET_KEY_SIZE = 64;
 
     // These bytes mean "this is a raw Ed25519 private key" in ASN.1 (or something like that)
-    inline const std::string ASN_ED25519_SEED_PREFIX = oxenc::from_hex("302e020100300506032b657004220420"sv);
+    inline constexpr auto ASN_ED25519_SEED_PREFIX = "302e020100300506032b657004220420"_hex;
     // These bytes mean "this is a raw Ed25519 public key" in ASN.1 (or something like that)
-    inline const std::string ASN_ED25519_PUBKEY_PREFIX = oxenc::from_hex("302a300506032b6570032100"sv);
+    inline constexpr auto ASN_ED25519_PUBKEY_PREFIX = "302a300506032b6570032100"_hex;
 
     struct gnutls_key
     {
@@ -135,12 +137,26 @@ namespace oxen::quic
         x509_loader() = default;
         x509_loader(std::string input)
         {
-            if (auto path = fs::u8path(input); fs::exists(path))
+            if (auto path = fs::path(
+#ifdef _WIN32
+                        std::u8string{reinterpret_cast<char8_t*>(input.data()), input.size()}
+#else
+                        input
+#endif
+                );
+                fs::exists(path))
             {
-                format = (str_tolower(path.extension().u8string()) == ".pem") ? GNUTLS_X509_FMT_PEM : GNUTLS_X509_FMT_DER;
+#ifdef _WIN32
+                auto p8_str = path.extension().u8string();
+                auto path_str = std::string{reinterpret_cast<const char*>(p8_str.data()), p8_str.size()};
+
+                format = (str_tolower(path_str) == ".pem") ? GNUTLS_X509_FMT_PEM : GNUTLS_X509_FMT_DER;
+#else
+                format = (str_tolower(path.extension().string()) == ".pem") ? GNUTLS_X509_FMT_PEM : GNUTLS_X509_FMT_DER;
+#endif
                 source = std::move(path);
             }
-            else if (bool pem = starts_with(input, "-----"); pem || (starts_with(input, "\x30") && input.size() >= 48))
+            else if (bool pem = input.starts_with("-----"); pem || (input.starts_with("\x30") && input.size() >= 48))
             {
                 source = std::move(input);
                 update_datum();
@@ -203,7 +219,8 @@ namespace oxen::quic
         //
         // Hidden behind a template so that implicit conversion to pointer doesn't cause trouble via
         // other unwanted implicit conversions.
-        template <typename T, std::enable_if_t<std::is_same_v<T, gnutls_datum_t>, int> = 0>
+        template <typename T>
+            requires std::same_as<T, gnutls_datum_t>
         operator const T*() const
         {
             return &mem;
@@ -224,13 +241,15 @@ namespace oxen::quic
         //
         // Hidden behind a template so that implicit conversion to pointer doesn't cause trouble via
         // other unwanted implicit conversions.
-        template <typename T, std::enable_if_t<std::is_same_v<T, char>, int> = 0>
+        template <typename T>
+            requires std::same_as<T, char>
         operator const T*() const
         {
             if (auto* p = std::get_if<fs::path>(&source))
             {
 #ifdef _WIN32
-                u8path_buf = p->u8string();
+                auto u8_path = p->u8string();
+                u8path_buf = std::string{reinterpret_cast<const char*>(u8_path.data()), u8_path.size()};
                 return u8path_buf.c_str();
 #else
                 return p->c_str();
@@ -245,10 +264,8 @@ namespace oxen::quic
         friend class GNUTLSSession;
 
       private:
-        GNUTLSCreds(std::string local_key, std::string local_cert, std::string remote_cert, std::string ca_arg);
-
         // Construct from raw Ed25519 keys
-        GNUTLSCreds(std::string ed_seed, std::string ed_pubkey);
+        GNUTLSCreds(std::string_view ed_seed, std::string_view ed_pubkey);
 
       public:
         gnutls_pcert_st pcrt;
@@ -268,12 +285,9 @@ namespace oxen::quic
 
         void set_key_verify_callback(key_verify_callback cb) { key_verify = std::move(cb); }
 
-        static std::shared_ptr<GNUTLSCreds> make(
-                std::string remote_key, std::string remote_cert, std::string local_cert = "", std::string ca_arg = "");
+        static std::shared_ptr<GNUTLSCreds> make_from_ed_keys(std::string_view seed, std::string_view pubkey);
 
-        static std::shared_ptr<GNUTLSCreds> make_from_ed_keys(std::string seed, std::string pubkey);
-
-        static std::shared_ptr<GNUTLSCreds> make_from_ed_seckey(std::string sk);
+        static std::shared_ptr<GNUTLSCreds> make_from_ed_seckey(std::string_view sk);
 
         std::unique_ptr<TLSSession> make_session(Connection& c, const std::vector<ustring>& alpns) override;
     };
@@ -303,7 +317,7 @@ namespace oxen::quic
 
         ~GNUTLSSession();
 
-        void* get_session() override { return session; };
+        void* get_session() override { return session; }
 
         void* get_anti_replay() const override { return anti_replay; }
 
