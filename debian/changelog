@@ -1,3 +1,95 @@
+oxen-libquic (1.1.0-1~ubuntu2004) focal; urgency=medium
+
+  [ dr7ana ]
+  * Incorrect pubkey length crash
+  * windows CI fix: cannot use fmt in headers for packaging reasons
+  * Exposed internal IPRange structs in ip.hpp
+  * constructors
+  * extricated event loop
+  * clang-tidy move references -> forwarding
+  * Address mutators
+  * ip object methods
+  * ipv6 test variation
+  * wrapped deleters
+  * Added ipv{4,6} string ctors plus 001 unit checks
+  * bump oxen-logging: cpp20 fixes
+  * more sensical ipv{4,6} implementations
+  * sid/experimental fix
+  * added ipv6::to_in6 method
+  * Stringformattable concept
+  * concept platform compat
+
+  [ Jason Rhinelander ]
+  * Address various CI race/timeout failures
+  * Drop " (amd64)" from linux build names
+  * Avoid segfault if establish fails
+  * Increase default wait time to 5s
+  * Eliminate mutex
+  * Split nested sections into separate test cases
+  * Allow more time for racey destruction
+  * Bump ngtcp2 submodule to latest release (1.4.0)
+  * Add apple arm builds to CI
+
+  [ Morgan Pretty ]
+  * [WIP] Updated the StaticBuild.cmake to support mobile builds
+  * [WIP] Tweaked StaticBuild.cmake so it compiles in both XCode and VSCode
+  * Added missing Apple arch argument for multi-arch builds
+  * Tweaks to build for the right platform and streamline build
+  * [WIP] Latest tweaks, still have linker errors...
+  * Manually linking all of the dependencies to get iOS build working
+
+  [ Jason Rhinelander ]
+  * Move static lib deps behind libquic_internal
+  * libtasn1: silence incredibly verbose warnings
+  * Update oxen-logging
+
+  [ Morgan Pretty ]
+  * Rename gmp_build_host to build_host (PR comments)
+
+  [ Jason Rhinelander ]
+  * Drop old "lokinet-ci-" docker image prefix
+  * Remove obsolete/unused cmake/ngtcp2_lib.cmake
+  * Fix hogweed target name in test suite
+  * Bump oxen-logging
+  * oxen-logging bump
+  * Add hack for libevent static cross-compilation
+  * Actually use the hacked host value
+  * Fix crash if we hit an I/O error while trying to flush
+  * Address aliasing warning under mingw
+  * Cosmetic declaration reorder
+  * Windows: make test executables fully static
+  * Call event_get_supported_methods just once
+  * Properly handle dual-stack IPv6
+  * clang-format: v16, c++20, remove semicolons, force west const
+  * Set default speedtest client/server log level to info
+  * Fix IPv4 addressing tests on Windows
+  * Add test case tracing (-T) to libquic test script
+  * Do WSACleanup() just once in destruction
+  * Add more verbose error log statement when a socket operation fails
+  * Windows: fix bound IPv4 socket info
+  * Enable Windows wine testing
+  * Include -H/-X in speedtest-server output for speedtest-client
+  * More windows fixes
+  * Catch some more zzzs
+  * Turn on test suite tracing for alltests invocations
+  * Fix race condition in dual-connection set_close_quietly test
+  * Drop C++20 starts_with/ends_with/remove_cvref_t backports
+  * Add opt::alpns endpoint option + simple string alpns ctors
+  * BTRequestStream: fire callbacks if invoked on closing stream
+  * Throw exception if trying to open a stream on a dead connection
+  * Dead conn stream handling redux
+  * Fix crash when stream buffer outlives the sent_req
+  * Remove sent_request::payload(), ::view()
+  * Fix session-ios "crash2"
+  * Remove superfluous endpoint.call
+  * Fix when_writeable firing after a connection has gone away
+  * Defer Connection destruction
+  * Make to_string() formattability opt-in
+  * C++20 concepts, constexpr _bsv, _usv, oxen-encoding
+  * Packaging updates for impending 1.1.0 release
+
+ -- Jason Rhinelander <jason@imaginary.ca>  Mon, 08 Jul 2024 12:53:32 -0300
+
 oxen-libquic (1.0.1-1~ubuntu2004) focal; urgency=medium
 
   * Race hack
