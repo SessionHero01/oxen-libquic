@@ -40,6 +40,7 @@ namespace oxen::quic
         friend class TestHelper;
         friend class Connection;
         friend class Network;
+        friend class Loop;
 
       protected:
         Stream(Connection& conn,
@@ -77,12 +78,7 @@ namespace oxen::quic
                 data_callback(*this, data);
         }
 
-        virtual void closed(uint64_t app_code)
-        {
-            if (close_callback)
-                close_callback(*this, app_code);
-            _conn = nullptr;
-        }
+        virtual void closed(uint64_t app_code);
 
         // Called immediately after set_ready so that a subclass can do thing as soon as the stream
         // becomes ready. The default does nothing.

@@ -10,7 +10,7 @@ namespace oxen::quic::test
     TEST_CASE("006 - Server streams: Direct creation and transmission", "[006][server][streams][send][execute]")
     {
         Network test_net{};
-        auto msg = "hello from the other siiiii-iiiiide"_bsv;
+        constexpr auto msg = "hello from the other siiiii-iiiiide"_bsv;
 
         std::atomic<int> data_check{0};
 
@@ -62,13 +62,13 @@ namespace oxen::quic::test
         require_future(client_future);
         require_future(server_future);
         REQUIRE(data_check == 2);
-    };
+    }
 
     TEST_CASE("006 - Server streams: Remote initiation, server send", "[006][server][streams][send][execute]")
     {
         Network test_net{};
-        auto msg = "hello from the other siiiii-iiiiide"_bsv;
-        auto response = "okay okay i get it already"_bsv;
+        constexpr auto msg = "hello from the other siiiii-iiiiide"_bsv;
+        constexpr auto response = "okay okay i get it already"_bsv;
 
         std::atomic<int> ci{0}, si{0};
         std::atomic<int> data_check{0};
@@ -174,5 +174,5 @@ namespace oxen::quic::test
 
         require_future(server_futures[2]);
         REQUIRE(data_check == 4);
-    };
+    }
 }  // namespace oxen::quic::test
