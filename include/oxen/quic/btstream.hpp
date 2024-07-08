@@ -80,7 +80,7 @@ namespace oxen::quic
         //  }
         explicit operator bool() const { return !timed_out && !is_error(); }
 
-        template <typename Char = char, typename = std::enable_if_t<sizeof(Char) == 1>>
+        template <oxenc::basic_char Char = char>
         std::basic_string_view<Char> view() const
         {
             return {reinterpret_cast<const Char*>(data.data()), data.size()};
@@ -94,13 +94,13 @@ namespace oxen::quic
         std::string_view endpoint() const { return {reinterpret_cast<const char*>(data.data()) + ep.first, ep.second}; }
         std::string endpoint_str() const { return std::string{endpoint()}; }
 
-        template <typename Char = char, typename = std::enable_if_t<sizeof(Char) == 1>>
+        template <oxenc::basic_char Char = char>
         std::basic_string_view<Char> body() const
         {
             return {reinterpret_cast<const Char*>(data.data()) + req_body.first, req_body.second};
         }
 
-        template <typename Char = char, typename = std::enable_if_t<sizeof(Char) == 1>>
+        template <oxenc::basic_char Char = char>
         std::basic_string<Char> body_str() const
         {
             return std::basic_string<Char>{body<Char>()};
@@ -136,22 +136,23 @@ namespace oxen::quic
 
         template <typename... Opt>
         sent_request(BTRequestStream& bp, std::string_view d, int64_t rid, Opt&&... opts) :
-                req_id{rid}, return_sender{bp}, total_len{d.size()}, req_time{get_time()}, expiry{req_time}
+                req_id{rid},
+                data{oxenc::bt_serialize(d)},
+                return_sender{bp},
+                total_len{data.size()},
+                req_time{get_time()},
+                expiry{req_time}
         {
             if (total_len > MAX_REQ_LEN)
                 throw std::invalid_argument{"Request body too long!"};
 
             ((void)handle_req_opts(std::forward<Opt>(opts)), ...);
-            data = oxenc::bt_serialize(d);
             expiry += timeout.value_or(DEFAULT_TIMEOUT);
         }
 
         bool is_expired(time_point now) const { return expiry < now; }
 
         message to_timeout() && { return {return_sender, ""_bs, true}; }
-
-        std::string_view view() { return {data}; }
-        std::string payload() && { return std::move(data); }
 
       private:
         void handle_req_opts(std::function<void(message)> func) { cb = std::move(func); }
@@ -186,6 +187,7 @@ namespace oxen::quic
 
         friend struct sent_request;
         friend class Network;
+        friend class Loop;
 
       protected:
         template <typename... Opt>
@@ -220,9 +222,12 @@ namespace oxen::quic
             auto req = std::make_shared<sent_request>(*this, encode_command(ep, rid, body), rid, std::forward<Opt>(opts)...);
 
             if (req->cb)
-                endpoint.call([this, r = std::move(req)]() { send(sent_reqs.emplace_back(std::move(r))->view()); });
+                endpoint.call([this, r = std::move(req)]() mutable {
+                    if (auto* req = add_sent_request(std::move(r)))
+                        send(std::move(req->data));
+                });
             else
-                send(std::move(*req).payload());
+                send(std::move(*req).data);
         }
         // Same as above, but takes a regular string_view
         template <typename... Opt>
@@ -269,6 +274,8 @@ namespace oxen::quic
         std::string encode_command(std::string_view endpoint, int64_t rid, bstring_view body);
 
         std::string encode_response(int64_t rid, bstring_view body, bool error);
+
+        sent_request* add_sent_request(std::shared_ptr<sent_request> req);
 
         size_t parse_length(std::string_view req);
 
