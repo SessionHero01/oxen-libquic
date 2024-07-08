@@ -22,6 +22,8 @@ override_dh_auto_configure:
 	debian/gen-liboxen-quic-install.sh $(DEB_VERSION_UPSTREAM)
 	dh_auto_configure -- \
 		$(DEB_CMAKE_ARCH_OPTIONS) \
+		-DCMAKE_C_COMPILER=gcc-10 \
+		-DCMAKE_CXX_COMPILER=g++-10 \
 		-DBUILD_SHARED_LIBS=ON \
 		-DLIBQUIC_VERSION_SO=ON \
 		-DLIBQUIC_SPEEDTEST_PREFIX=quic-
