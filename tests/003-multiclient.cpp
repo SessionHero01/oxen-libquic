@@ -20,19 +20,18 @@ namespace oxen::quic::test
             auto client_a = test_net.endpoint(default_addr);
 
             REQUIRE_THROWS(
-                    client_b = test_net.endpoint(
-                            RemoteAddress{defaults::SERVER_PUBKEY, "127.0.0.1"s, client_a->local().port()}));
+                    client_b = test_net.endpoint(RemoteAddress{defaults::SERVER_PUBKEY, "", client_a->local().port()}));
 
             auto client_c = test_net.endpoint(default_addr);
 
             REQUIRE_FALSE(client_a == client_c);
-        };
-    };
+        }
+    }
 
     TEST_CASE("003 - Multi-client to server transmission: Execution", "[003][multi-client][execute]")
     {
         Network test_net{};
-        auto msg = "hello from the other siiiii-iiiiide"_bsv;
+        constexpr auto msg = "hello from the other siiiii-iiiiide"_bsv;
 
         std::atomic<int> data_check{0};
         std::vector<std::promise<void>> stream_promises{4};
@@ -112,5 +111,5 @@ namespace oxen::quic::test
         async_thread_b.join();
         async_thread_a.join();
         REQUIRE(data_check == 4);
-    };
+    }
 }  // namespace oxen::quic::test
