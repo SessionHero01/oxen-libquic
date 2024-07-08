@@ -1,11 +1,28 @@
 #pragma once
 
 #include "formattable.hpp"
+#include "ip.hpp"
 #include "utils.hpp"
+
+#if defined(__OpenBSD__) || defined(__DragonFly__)
+// These systems are known to disallow dual stack binding, and so on such systems when
+// invoked with an empty address we default to the IPv4 any address rather than the IPv6 any
+// address as the IPv4 is very likely to be more usable.
+//
+// A libquic-using application that wants to support full dual stack on these OSes as well
+// will need to modify how they use QUIC to maintain *two* endpoints: one bound to `[::]`
+// and one bound to `0.0.0.0`.  (Using such an explicit address instead of a
+// default-constructed or empty IP address will not be dual stack anywhere).  Alternatively an
+// application can use this OXEN_LIBQUIC_ADDRESS_NO_DUAL_STACK definition to figure something out.
+#define OXEN_LIBQUIC_ADDRESS_NO_DUAL_STACK
+#endif
 
 namespace oxen::quic
 {
     inline constexpr std::array<uint8_t, 16> _ipv6_any_addr = {0};
+
+    template <typename T>
+    concept RawSockAddr = std::same_as<T, sockaddr> || std::same_as<T, sockaddr_in> || std::same_as<T, sockaddr_in6>;
 
     // Holds an address, with a ngtcp2_addr held for easier passing into ngtcp2 functions
     struct Address
@@ -21,10 +38,14 @@ namespace oxen::quic
         {
             std::memmove(&_sock_addr, &obj._sock_addr, sizeof(_sock_addr));
             _addr.addrlen = obj._addr.addrlen;
+            dual_stack = obj.dual_stack;
         }
 
       public:
-        // Default constructor or single-port constructor yields [::]:port (or [::]:0 if port omitted)
+        /// Default constructor or single-port constructor yields [::]:port (or [::]:0 if port
+        /// omitted) on most platforms where dual-stack IPv6/IPv4 sockets are supported.  On OSes
+        /// that do not allow dual-stack sockets (OpenBSD, DragonFlyBSD) the default for an empty IP
+        /// address is instead the IPv4 any address (0.0.0.0).
         explicit Address(uint16_t port = 0) : Address{"", port} {}
 
         Address(const sockaddr* s, socklen_t n)
@@ -41,12 +62,12 @@ namespace oxen::quic
 
         explicit Address(const ngtcp2_addr& addr);
 
+        explicit Address(ipv4 v4, uint16_t port = 0);
+
+        explicit Address(ipv6 v6, uint16_t port = 0);
+
         // Assignment from a sockaddr pointer; we copy the sockaddr's contents
-        template <
-                typename T,
-                std::enable_if_t<
-                        std::is_same_v<T, sockaddr> || std::is_same_v<T, sockaddr_in> || std::is_same_v<T, sockaddr_in6>,
-                        int> = 0>
+        template <RawSockAddr T>
         Address& operator=(const T* s)
         {
             _addr.addrlen = std::is_same_v<T, sockaddr>
@@ -62,6 +83,14 @@ namespace oxen::quic
             _copy_internals(obj);
             return *this;
         }
+
+        // If true and this Address is IPv6 then QUIC will set the IPV6_V6ONLY socket option when
+        // binding the socket.  This will default to true *only* for default-constructed any
+        // addresses; if an explicit address is given (including the `[::]` IPv6 any-address) then
+        // this will remain false, and the socket will not be dual-stack unless this is manually
+        // set to true before binding.  (Note that manually setting it to true on systems where the
+        // socket option cannot be set will cause a failure during endpoint binding).
+        bool dual_stack = false;
 
         void set_port(uint16_t port)
         {
@@ -140,11 +169,16 @@ namespace oxen::quic
             return _addr.addrlen == sizeof(sockaddr_in) &&
                    reinterpret_cast<const sockaddr_in&>(_sock_addr).sin_family == AF_INET;
         }
+
         inline bool is_ipv6() const
         {
             return _addr.addrlen == sizeof(sockaddr_in6) &&
                    reinterpret_cast<const sockaddr_in6&>(_sock_addr).sin6_family == AF_INET6;
         }
+
+        ipv4 to_ipv4() const;
+
+        ipv6 to_ipv6() const;
 
         // Accesses the sockaddr_in for this address.  Precondition: `is_ipv4()`
         inline const sockaddr_in& in4() const
@@ -177,20 +211,12 @@ namespace oxen::quic
         // pointer to other things (like bool) won't occur.
         //
         // If the given pointer is mutated you *must* call update_socklen() afterwards.
-        template <
-                typename T,
-                std::enable_if_t<
-                        std::is_same_v<T, sockaddr> || std::is_same_v<T, sockaddr_in> || std::is_same_v<T, sockaddr_in6>,
-                        int> = 0>
+        template <RawSockAddr T>
         operator T*()
         {
             return reinterpret_cast<T*>(&_sock_addr);
         }
-        template <
-                typename T,
-                std::enable_if_t<
-                        std::is_same_v<T, sockaddr> || std::is_same_v<T, sockaddr_in> || std::is_same_v<T, sockaddr_in6>,
-                        int> = 0>
+        template <RawSockAddr T>
         operator const T*() const
         {
             return reinterpret_cast<const T*>(&_sock_addr);
@@ -199,7 +225,8 @@ namespace oxen::quic
         // Conversion to a const ngtcp2_addr reference and pointer.  We don't provide non-const
         // access because this points at our internal data.
         operator const ngtcp2_addr&() const { return _addr; }
-        template <typename T, std::enable_if_t<std::is_same_v<T, ngtcp2_addr*>, int> = 0>
+        template <typename T>
+            requires std::same_as<T, ngtcp2_addr>
         operator const T*() const
         {
             return &_addr;
@@ -270,9 +297,8 @@ namespace oxen::quic
         // Convenience method for debugging, etc.  This is usually called implicitly by passing the
         // Address to fmt to format it.
         std::string to_string() const;
+        constexpr static bool to_string_formattable = true;
     };
-    template <>
-    inline constexpr bool IsToStringFormattable<Address> = true;
 
     struct RemoteAddress : public Address
     {
@@ -304,8 +330,6 @@ namespace oxen::quic
             return *this;
         }
     };
-    template <>
-    inline constexpr bool IsToStringFormattable<RemoteAddress> = true;
 
     // Wrapper for ngtcp2_path with remote/local components. Implicitly convertible
     // to ngtcp2_path*
@@ -338,22 +362,22 @@ namespace oxen::quic
         }
 
         // template code to pass Path as ngtcp2_path into ngtcp2 functions
-        template <typename T, std::enable_if_t<std::is_same_v<T, ngtcp2_path>, int> = 0>
+        template <typename T>
+            requires std::same_as<T, ngtcp2_path>
         operator T*()
         {
             return &_path;
         }
-        template <typename T, std::enable_if_t<std::is_same_v<T, ngtcp2_path>, int> = 0>
+        template <typename T>
+            requires std::same_as<T, ngtcp2_path>
         operator const T*() const
         {
             return &_path;
         }
 
         std::string to_string() const;
+        constexpr static bool to_string_formattable = true;
     };
-    template <>
-    inline constexpr bool IsToStringFormattable<Path> = true;
-
 }  // namespace oxen::quic
 
 namespace std

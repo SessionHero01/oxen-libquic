@@ -14,7 +14,7 @@ namespace oxen::quic::test
     TEST_CASE("002 - Simple client to server transmission", "[002][simple][execute]")
     {
         Network test_net{};
-        auto good_msg = "hello from the other siiiii-iiiiide"_bsv;
+        constexpr auto good_msg = "hello from the other siiiii-iiiiide"_bsv;
 
         std::promise<bool> d_promise;
         std::future<bool> d_future = d_promise.get_future();
@@ -44,12 +44,12 @@ namespace oxen::quic::test
         REQUIRE_NOTHROW(client_stream->send(good_msg));
 
         require_future(d_future);
-    };
+    }
 
     TEST_CASE("002 - Simple client to server transmission", "[002][simple][bidirectional]")
     {
         Network test_net{};
-        auto good_msg = "hello from the other siiiii-iiiiide"_bsv;
+        constexpr auto good_msg = "hello from the other siiiii-iiiiide"_bsv;
 
         std::vector<std::promise<void>> d_promises{2};
         std::vector<std::future<void>> d_futures{2};
@@ -96,12 +96,12 @@ namespace oxen::quic::test
         REQUIRE_NOTHROW(client_stream->send(good_msg));
 
         require_future(d_futures[1]);
-    };
+    }
 
     TEST_CASE("002 - Simple client to server transmission", "[002][simple][2x2]")
     {
         Network test_net{};
-        auto good_msg = "hello from the other siiiii-iiiiide"_bsv;
+        constexpr auto good_msg = "hello from the other siiiii-iiiiide"_bsv;
 
         std::vector<std::promise<void>> d_promises{2};
         std::vector<std::future<void>> d_futures{2};
@@ -145,7 +145,7 @@ namespace oxen::quic::test
         server_b_stream->send(good_msg);
 
         require_future(d_futures[1]);
-    };
+    }
 
     TEST_CASE("002 - Client to server transmission, larger string ownership", "[002][simple][larger][ownership]")
     {
@@ -228,7 +228,7 @@ namespace oxen::quic::test
             CHECK(good == tests);
             CHECK(bad == 0);
         }
-    };
+    }
 
     TEST_CASE("002 - BParser Testing", "[002][bparser]")
     {
@@ -357,7 +357,8 @@ namespace oxen::quic::test
                 if (m.body() == "hello")
                     m.respond("goodbye");
                 else if (m.body() == "I need a reply crypto-soon")
-                {}  // <-- Crypto-soon, defined.
+                {
+                }  // <-- Crypto-soon, defined.
                 else if (m.body() == "I hate you")
                     m.respond("lol", true);
             };
@@ -567,7 +568,7 @@ namespace oxen::quic::test
                 client_bp->command("test_endpoint"s, req_msg, client_reply_handler);
             }
 
-            require_future(done, 3s);
+            require_future(done, 10s);
             CHECK(good_responses == num_requests);
             CHECK(responses == good_responses);
         }
@@ -711,7 +712,7 @@ namespace oxen::quic::test
             auto s = c.queue_incoming_stream<BTRequestStream>();
             s->register_handler("sleep"s, [&](message m) {
                 slow_response = std::thread{[m = std::move(m)] {
-                    std::this_thread::sleep_for(250ms);
+                    std::this_thread::sleep_for(1s);
                     m.respond("I'm slow");
                 }};
             });

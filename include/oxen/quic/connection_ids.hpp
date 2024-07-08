@@ -38,9 +38,8 @@ namespace oxen::quic
         explicit operator const uint64_t&() const { return id; }
 
         std::string to_string() const;
+        constexpr static bool to_string_formattable = true;
     };
-    template <>
-    constexpr inline bool IsToStringFormattable<ConnectionID> = true;
 
     // Wrapper for ngtcp2_cid with helper functionalities to make it passable
     struct alignas(size_t) quic_cid final : ngtcp2_cid
@@ -67,9 +66,8 @@ namespace oxen::quic
         static quic_cid random();
 
         std::string to_string() const;
+        constexpr static bool to_string_formattable = true;
     };
-    template <>
-    constexpr inline bool IsToStringFormattable<quic_cid> = true;
 }  // namespace oxen::quic
 
 namespace std
