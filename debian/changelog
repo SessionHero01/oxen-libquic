@@ -1,3 +1,9 @@
+oxen-libquic (1.1.0-2~deb13) trixie; urgency=medium
+
+  * Bump oxen-logging to latest
+
+ -- Jason Rhinelander <jason@imaginary.ca>  Tue, 09 Jul 2024 23:20:41 -0300
+
 oxen-libquic (1.1.0-1~deb13) trixie; urgency=medium
 
   [ dr7ana ]
