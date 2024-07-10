@@ -1,3 +1,9 @@
+oxen-libquic (1.1.0-2) unstable; urgency=medium
+
+  * Bump oxen-logging to latest
+
+ -- Jason Rhinelander <jason@imaginary.ca>  Tue, 09 Jul 2024 23:20:37 -0300
+
 oxen-libquic (1.1.0-1) unstable; urgency=medium
 
   [ dr7ana ]
