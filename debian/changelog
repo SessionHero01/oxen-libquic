@@ -1,3 +1,10 @@
+oxen-libquic (1.1.0-2~ubuntu2404) noble; urgency=medium
+
+  * Remove broken noble-armhf
+  * Bump oxen-logging to latest
+
+ -- Jason Rhinelander <jason@imaginary.ca>  Tue, 09 Jul 2024 23:20:51 -0300
+
 oxen-libquic (1.1.0-1~ubuntu2404) noble; urgency=medium
 
   [ dr7ana ]
