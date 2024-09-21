@@ -301,20 +301,12 @@ build_external(libiconv
     BUILD_BYPRODUCTS ${DEPS_DESTDIR}/lib/libiconv.a ${DEPS_DESTDIR}/include/iconv.h)
 add_static_target(libiconv::libiconv libiconv_external libiconv.a)
 
-build_external(libunistring
-    CONFIGURE_COMMAND ./configure ${build_host} --disable-shared --prefix=${DEPS_DESTDIR} --with-pic
-        "CC=${deps_cc}" "CXX=${deps_cxx}" "CFLAGS=${deps_CFLAGS}${apple_cflags_arch}" "CXXFLAGS=${deps_CXXFLAGS}${apple_cflags_arch}"
-        "CPPFLAGS=-I${DEPS_DESTDIR}/include" "LDFLAGS=-L${DEPS_DESTDIR}/lib${apple_ldflags_arch}" ${cross_rc}
-    DEPENDS libiconv_external
-    BUILD_BYPRODUCTS ${DEPS_DESTDIR}/lib/libunistring.a ${DEPS_DESTDIR}/include/unistr.h)
-add_static_target(libunistring::libunistring libunistring_external libunistring.a libiconv::libiconv)
-
 build_external(libidn2
     CONFIGURE_COMMAND ./configure ${build_host} --disable-shared --disable-doc --prefix=${DEPS_DESTDIR} --with-pic
         "CC=${deps_cc}" "CXX=${deps_cxx}" "CFLAGS=${deps_CFLAGS}${apple_cflags_arch}" "CXXFLAGS=${deps_CXXFLAGS}${apple_cflags_arch}" ${cross_rc}
-    DEPENDS libunistring_external
+    DEPENDS libiconv_external
     BUILD_BYPRODUCTS ${DEPS_DESTDIR}/lib/libidn2.a ${DEPS_DESTDIR}/include/idn2.h)
-add_static_target(libidn2::libidn2 libidn2_external libidn2.a libunistring::libunistring)
+add_static_target(libidn2::libidn2 libidn2_external libidn2.a )
 
 build_external(gmp
     CONFIGURE_COMMAND ./configure ${build_host} --disable-shared --prefix=${DEPS_DESTDIR} --with-pic
